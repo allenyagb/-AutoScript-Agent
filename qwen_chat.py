@@ -3,6 +3,7 @@
 """
 Qwen 大模型多轮对话脚本
 使用阿里云 DashScope API 与通义千问进行对话
+支持流式输出
 """
 
 import os
@@ -11,6 +12,7 @@ import json
 import ssl
 from typing import List, Dict
 from urllib import request, error
+import time
 
 
 class QwenChat:
@@ -50,12 +52,13 @@ class QwenChat:
             "content": content
         })
     
-    def chat(self, user_input: str) -> str:
+    def chat(self, user_input: str, stream: bool = True) -> str:
         """
         发送消息并获取回复
         
         Args:
             user_input: 用户输入的消息
+            stream: 是否使用流式输出，默认为 True
             
         Returns:
             助手的回复内容
@@ -75,37 +78,39 @@ class QwenChat:
                 }
             }
             
+            # 如果启用流式输出，添加增量参数
+            if stream:
+                payload["parameters"]["incremental_output"] = True
+            
             # 将数据转换为 JSON 字节
             data = json.dumps(payload).encode('utf-8')
             
             # 创建请求对象
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # 流式输出需要添加 Accept 头
+            if stream:
+                headers["Accept"] = "text/event-stream"
+            
             req = request.Request(
                 self.api_url,
                 data=data,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
+                headers=headers,
                 method='POST'
             )
             
             # 发送请求
-            response = request.urlopen(req, context=self.ssl_context, timeout=30)
+            response = request.urlopen(req, context=self.ssl_context, timeout=60)
             
-            # 读取响应
-            response_data = response.read().decode('utf-8')
-            result = json.loads(response_data)
-            
-            # 解析返回结果
-            if "output" in result and "choices" in result["output"]:
-                assistant_reply = result["output"]["choices"][0]["message"]["content"]
-                # 添加助手回复到历史
-                self.add_assistant_message(assistant_reply)
-                return assistant_reply
+            if stream:
+                # 流式输出处理
+                return self._handle_stream_response(response)
             else:
-                error_msg = f"响应格式异常: {result}"
-                print(f"\n⚠️  {error_msg}")
-                return "抱歉，无法解析响应结果"
+                # 非流式输出处理
+                return self._handle_normal_response(response)
                 
         except error.HTTPError as e:
             # 处理 HTTP 错误
@@ -134,6 +139,93 @@ class QwenChat:
             error_msg = f"发生异常: {str(e)}"
             print(f"\n⚠️  {error_msg}")
             return f"抱歉，发生异常: {str(e)}"
+    
+    def _handle_stream_response(self, response) -> str:
+        """
+        处理流式响应
+        
+        Args:
+            response: HTTP 响应对象
+            
+        Returns:
+            完整的回复内容
+        """
+        full_content = ""
+        
+        try:
+            # 逐行读取响应
+            for line in response:
+                line_str = line.decode('utf-8').strip()
+                
+                if not line_str:
+                    continue
+                
+                # 处理 SSE 格式的数据
+                if line_str.startswith('data:'):
+                    json_str = line_str[5:].strip()  # 去掉 "data:" 前缀
+                    
+                    if json_str == '[DONE]':
+                        # 流结束
+                        print()  # 换行
+                        self.add_assistant_message(full_content)
+                        return full_content
+                    
+                    try:
+                        data = json.loads(json_str)
+                        
+                        # DashScope 流式响应格式
+                        if "output" in data and "choices" in data["output"]:
+                            choice = data["output"]["choices"][0]
+                            
+                            # 检查是否有 delta 或 message
+                            content = None
+                            if "delta" in choice and "content" in choice["delta"]:
+                                content = choice["delta"]["content"]
+                            elif "message" in choice and "content" in choice["message"]:
+                                content = choice["message"]["content"]
+                            
+                            if content:
+                                full_content += content
+                                # 逐字打印，实现打字机效果
+                                print(content, end='', flush=True)
+                                time.sleep(0.02)  # 控制输出速度
+                    
+                    except json.JSONDecodeError:
+                        continue
+                        
+        except Exception as e:
+            print(f"\n⚠️  流式输出异常: {e}")
+        
+        # 保存结果
+        if full_content:
+            print()  # 换行
+            self.add_assistant_message(full_content)
+        
+        return full_content
+    
+    def _handle_normal_response(self, response) -> str:
+        """
+        处理普通响应（非流式）
+        
+        Args:
+            response: HTTP 响应对象
+            
+        Returns:
+            完整的回复内容
+        """
+        response_data = response.read().decode('utf-8')
+        result = json.loads(response_data)
+        
+        # 解析返回结果
+        if "output" in result and "choices" in result["output"]:
+            assistant_reply = result["output"]["choices"][0]["message"]["content"]
+            # 添加助手回复到历史
+            self.add_assistant_message(assistant_reply)
+            return assistant_reply
+        else:
+            error_msg = f"响应格式异常: {result}"
+            print(f"\n⚠️  {error_msg}")
+            return "抱歉，无法解析响应结果"
     
     def clear_history(self):
         """清空对话历史"""
@@ -180,7 +272,7 @@ def main():
     # 初始化对话器
     try:
         chatbot = QwenChat()
-        print(f"✅ 已成功连接到 {chatbot.model} 模型\n")
+        print(f"✅ 已成功连接到 {chatbot.model} 模型（流式输出）\n")
     except ValueError as e:
         print(f"❌ {e}")
         sys.exit(1)
@@ -207,11 +299,9 @@ def main():
                 chatbot.clear_history()
                 continue
             
-            # 发送消息并获取回复
-            print("\n🤖 Qwen 正在思考...", end="", flush=True)
-            reply = chatbot.chat(user_input)
-            print("\r🤖 Qwen: ")
-            print(reply)
+            # 发送消息并获取回复（流式输出）
+            print("\n🤖 Qwen: ", end="", flush=True)
+            reply = chatbot.chat(user_input, stream=True)
             
         except KeyboardInterrupt:
             print("\n\n👋 检测到中断信号，再见！")
