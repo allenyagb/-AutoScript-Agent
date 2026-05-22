@@ -1,1 +1,1 @@
-{"project": "AutoScript Agent", "version": "0.1.0", "features": ["script_generation", "safety_check", "execution"]}
+{"project": "AutoScript Agent", "version": "0.2.0", "features": ["langchain", "tool_calling", "agent"]}

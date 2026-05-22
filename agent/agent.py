@@ -1,255 +1,221 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AutoScript Agent 主控模块 - 编排任务解析、生成、执行全流程
+AutoScript Agent 主控模块 (LangChain 版本)
+使用 LangChain Agent + 工具调用完成自主任务执行
 """
 
 import os
 import sys
 import time
-from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
-from .script_generator import ScriptGenerator, GeneratedScript
-from .script_executor import ScriptExecutor, ExecutionResult
-from .safety_checker import SafetyChecker, SafetyReport
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage
+
+from .chat_model import ChatQwen
+from .tools import write_file, read_file, list_files, move_file, execute_shell
+from .safety_checker import SafetyChecker
+from .script_executor import ScriptExecutor
+
+# 注册所有工具
+ALL_TOOLS = [write_file, read_file, list_files, move_file, execute_shell]
+
+SYSTEM_PROMPT = """你是 Ubuntu 24.04 上的自主任务执行助手 AutoScript Agent。
+
+## 你的能力
+你可以使用以下工具完成文件操作和系统命令：
+- write_file: 创建或覆盖文件
+- read_file: 读取文件内容
+- list_files: 列出工作区文件
+- move_file: 移动或重命名文件
+- execute_shell: 执行安全的 Shell 命令
+
+## 工作原则
+1. 收到用户任务后，选择合适的工具逐步完成
+2. 完成操作后，用 read_file 或 list_files 验证结果
+3. 最后用中文向用户报告任务完成情况和结果
+4. 如果遇到错误，说明原因并建议解决方案
+5. 绝不尝试执行危险命令（sudo, rm -rf / 等）
+
+## 工作区
+所有文件操作都在沙箱工作区中进行，路径相对于工作区根目录。
+"""
 
 
-@dataclass
-class TaskResult:
-    """任务执行结果"""
-    success: bool = False
-    task_description: str = ""
-    generated_script: Optional[GeneratedScript] = None
-    safety_report: Optional[SafetyReport] = None
-    execution_result: Optional[ExecutionResult] = None
-    retry_count: int = 0
-    max_retries: int = 3
-    error_message: str = ""
-    total_time: float = 0.0
-    steps: List[str] = field(default_factory=list)
+class LangChainAgent:
+    """基于 LangChain 的自主任务执行智能体"""
 
-
-class AutoScriptAgent:
-    """自主任务执行智能体
-
-    核心流程：
-    1. 解析用户自然语言任务
-    2. 调用大模型生成脚本
-    3. 安全性检查
-    4. 执行脚本并返回结果
-    5. 失败时自动重试（最多3次）
-    """
-
-    # 最大重试次数
-    MAX_RETRIES = 3
-
-    def __init__(self, api_key: str = None, workspace_dir: str = None,
-                 use_sandbox: bool = False):
+    def __init__(self, api_key: str = None, workspace_dir: str = None):
         """
-        初始化智能体
+        初始化 Agent
 
         Args:
             api_key: DashScope API Key
             workspace_dir: 工作区目录
-            use_sandbox: 是否使用沙箱
         """
+        self.api_key = api_key or "sk-ee03a518654647f09d2579009abbb4c2"
         self.workspace_dir = os.path.abspath(
             workspace_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), "sandbox_workspace")
         )
+        os.makedirs(self.workspace_dir, exist_ok=True)
 
-        self.generator = ScriptGenerator(api_key=api_key)
-        self.executor = ScriptExecutor(workspace_dir=self.workspace_dir, use_sandbox=use_sandbox)
+        # 创建 LangChain ChatModel 并绑定工具
+        self.model = ChatQwen(api_key=self.api_key).bind_tools(ALL_TOOLS)
+
+        # 创建 Agent
+        self.agent = create_agent(
+            model=self.model,
+            tools=ALL_TOOLS,
+            system_prompt=SYSTEM_PROMPT,
+        )
+
+        # 保留安全检查器和执行器供直接使用
         self.safety_checker = SafetyChecker(workspace_dir=self.workspace_dir)
+        self.executor = ScriptExecutor(workspace_dir=self.workspace_dir)
 
-    def execute_task(self, task_description: str) -> TaskResult:
+    def execute(self, task: str) -> dict:
         """
-        执行自然语言描述的任务
+        执行自然语言任务
 
         Args:
-            task_description: 自然语言任务描述，如 "在 /tmp 下创建一个名为 hello.txt 的文件"
+            task: 自然语言任务描述
 
         Returns:
-            TaskResult: 任务执行结果
+            dict: 包含执行步骤和结果的字典
         """
         start_time = time.time()
-        result = TaskResult(task_description=task_description)
-        result.steps.append(f"📋 收到任务: {task_description}")
 
-        retry_count = 0
-        last_error = ""
+        print(f"\n📋 任务: {task}")
+        print("🤖 Agent 正在使用 LangChain 工具调用...")
 
-        while retry_count <= self.MAX_RETRIES:
-            if retry_count > 0:
-                result.steps.append(f"🔄 第 {retry_count} 次重试...")
-                # 在重试时，把上次的错误信息加入任务描述
-                enhanced_task = f"{task_description}\n\n【上次执行失败的错误信息】\n{last_error}\n请修正脚本。"
-            else:
-                enhanced_task = task_description
+        result = self.agent.invoke({"messages": [HumanMessage(content=task)]})
 
-            # 步骤1: 生成脚本
-            result.steps.append("🤖 正在调用大模型生成脚本...")
-            try:
-                generated_script = self.generator.generate(enhanced_task)
-                result.generated_script = generated_script
-                result.steps.append(
-                    f"✅ 脚本生成成功 (类型: {generated_script.script_type}, "
-                    f"长度: {len(generated_script.content)} 字符)"
-                )
-            except Exception as e:
-                result.steps.append(f"❌ 脚本生成失败: {e}")
-                result.error_message = f"脚本生成失败: {e}"
-                break
+        elapsed = time.time() - start_time
 
-            # 步骤2: 安全性检查
-            result.steps.append("🔍 正在进行安全性检查...")
-            safety_report = self.safety_checker.check(
-                generated_script.content,
-                generated_script.script_type
-            )
-            result.safety_report = safety_report
+        # 提取消息历史
+        messages = result.get("messages", [])
 
-            if safety_report.risk_level == "dangerous":
-                result.steps.append(f"⛔ 脚本包含高危操作，拒绝执行: {safety_report.risks}")
-                result.error_message = f"安全检查不通过 (危险): {', '.join(safety_report.risks)}"
-                last_error = f"安全风险: {', '.join(safety_report.risks)}。请生成不包含这些危险操作的脚本。"
-                retry_count += 1
-                continue
+        return {
+            "success": True,
+            "task": task,
+            "messages": messages,
+            "elapsed": elapsed,
+            "final_answer": messages[-1].content if messages else "",
+        }
 
-            if safety_report.risk_level == "warning":
-                result.steps.append(f"⚠️ 安全检查发现警告: {safety_report.risks}")
-                # 警告级别仍然允许执行，但记录下来
+    def print_result(self, result: dict):
+        """打印任务执行结果"""
+        print("\n" + "=" * 60)
+        print("📊 LangChain Agent 执行报告")
+        print("=" * 60)
 
-            result.steps.append("✅ 安全检查通过")
+        messages = result.get("messages", [])
 
-            # 步骤3: 执行脚本
-            result.steps.append("🚀 正在执行脚本...")
-            execution_result = self.executor.execute(
-                generated_script.content,
-                generated_script.script_type
-            )
-            result.execution_result = execution_result
-            result.retry_count = retry_count
+        print("\n📋 执行步骤:")
+        for i, msg in enumerate(messages):
+            role = type(msg).__name__
+            if role == "HumanMessage":
+                print(f"  [{i}] 👤 用户: {msg.content[:100]}...")
+            elif role == "AIMessage":
+                if msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        print(f"  [{i}] 🔧 调用工具: {tc['name']}({tc['args']})")
+                elif msg.content:
+                    print(f"  [{i}] 🤖 Agent: {msg.content[:200]}")
+            elif role == "ToolMessage":
+                print(f"  [{i}] 📤 工具返回: {msg.content[:150]}")
 
-            elapsed = time.time() - start_time
-            result.steps.append(f"⏱ 执行耗时: {elapsed:.2f} 秒")
+        print(f"\n⏱ 总耗时: {result['elapsed']:.2f} 秒")
 
-            if execution_result.success:
-                result.success = True
-                result.steps.append("🎉 任务执行成功！")
-                break
-            else:
-                result.steps.append(f"❌ 执行失败 (返回码: {execution_result.return_code})")
-                last_error = execution_result.stderr or execution_result.error_message
+        if result.get("final_answer"):
+            print(f"\n📝 最终回复:\n{result['final_answer']}")
 
-                # 如果是致命错误（如语法错误），不再重试
-                if "SyntaxError" in last_error:
-                    result.steps.append("检测到语法错误，不再重试")
-                    result.error_message = f"脚本语法错误: {last_error}"
-                    break
+        print("=" * 60)
 
-                retry_count += 1
-                if retry_count > self.MAX_RETRIES:
-                    result.steps.append(f"已达最大重试次数 ({self.MAX_RETRIES})，任务失败")
-                    result.error_message = f"重试 {self.MAX_RETRIES} 次后仍失败: {last_error}"
 
-        result.total_time = time.time() - start_time
-        return result
+# 兼容旧接口
+class AutoScriptAgent(LangChainAgent):
+    """兼容旧接口的包装器"""
+    def execute_task(self, task_description: str):
+        """兼容旧的 execute_task 接口"""
+        # 返回类似旧 TaskResult 的对象
+        from dataclasses import dataclass, field
+        from typing import List
 
-    def print_result(self, result: TaskResult):
-        """格式化打印任务结果"""
+        @dataclass
+        class TaskResult:
+            success: bool = False
+            task_description: str = ""
+            steps: List[str] = field(default_factory=list)
+            total_time: float = 0.0
+            error_message: str = ""
+
+        result = self.execute(task_description)
+        messages = result["messages"]
+
+        tr = TaskResult(
+            success=result["success"],
+            task_description=task_description,
+            total_time=result["elapsed"],
+        )
+
+        for msg in messages:
+            role = type(msg).__name__
+            if role == "AIMessage":
+                if msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tr.steps.append(f"🔧 调用工具: {tc['name']}({tc['args']})")
+                elif msg.content:
+                    tr.steps.append(f"🤖 {msg.content[:200]}")
+            elif role == "ToolMessage":
+                tr.steps.append(f"📤 工具返回: {msg.content[:100]}")
+
+        return tr
+
+    def print_result(self, task_result):
+        """兼容旧的 print_result 接口"""
         print("\n" + "=" * 60)
         print("📊 任务执行报告")
         print("=" * 60)
-
-        # 执行步骤
         print("\n📋 执行流程:")
-        for step in result.steps:
+        for step in task_result.steps:
             print(f"  {step}")
-
-        # 脚本内容
-        if result.generated_script:
-            print("\n" + "-" * 60)
-            print(f"📝 生成的脚本 ({result.generated_script.script_type}):")
-            print("-" * 60)
-            print(result.generated_script.content)
-
-        # 执行结果
-        if result.execution_result:
-            print("\n" + "-" * 60)
-            print("📤 执行输出 (stdout):")
-            print("-" * 60)
-            print(result.execution_result.stdout or "(无输出)")
-
-            if result.execution_result.stderr and not result.execution_result.success:
-                print("\n" + "-" * 60)
-                print("⚠️ 错误输出 (stderr):")
-                print("-" * 60)
-                print(result.execution_result.stderr)
-
-            print(f"\n返回码: {result.execution_result.return_code}")
-            print(f"执行耗时: {result.execution_result.execution_time:.2f} 秒")
-
-        # 安全报告
-        if result.safety_report and result.safety_report.risks:
-            print(f"\n🛡 安全报告 (等级: {result.safety_report.risk_level}):")
-            for risk in result.safety_report.risks:
-                print(f"  - {risk}")
-
-        # 总结
-        print("\n" + "=" * 60)
-        if result.success:
-            print(f"✅ 任务执行成功！总耗时: {result.total_time:.2f} 秒")
-        else:
-            print(f"❌ 任务执行失败 (重试 {result.retry_count} 次)")
-            if result.error_message:
-                print(f"   原因: {result.error_message}")
+        print(f"\n⏱ 总耗时: {task_result.total_time:.2f} 秒")
+        status = "✅ 成功" if task_result.success else "❌ 失败"
+        print(f"{status}")
         print("=" * 60)
 
 
-def run_interactive(api_key: str = None, workspace_dir: str = None):
+def run_interactive():
     """交互式运行 Agent"""
     print("\n" + "=" * 60)
-    print("🤖 AutoScript Agent - 自主任务执行智能体")
+    print("🤖 AutoScript Agent (LangChain) - 自主任务执行智能体")
     print("=" * 60)
     print("💡 使用提示:")
     print("  - 用自然语言描述你要执行的任务")
-    print("  - 例如: '在沙箱中创建一个 hello.txt 文件'")
-    print("  - 例如: '在当前目录列出所有文件'")
+    print("  - 例如: '创建一个 hello.txt 文件，内容是Hello World'")
+    print("  - 例如: '列出当前目录的所有文件'")
+    print("  - 例如: '把 hello.txt 重命名为 world.txt'")
     print("  - 输入 'quit' 或 'exit' 退出")
     print("=" * 60)
 
-    agent = AutoScriptAgent(api_key=api_key, workspace_dir=workspace_dir)
-    print(f"✅ Agent 初始化成功")
+    agent = LangChainAgent()
+    print(f"✅ Agent 初始化成功 (LangChain + qwen3.7-max)")
     print(f"📂 工作区: {agent.workspace_dir}\n")
 
     while True:
         try:
             task = input("\n💬 请输入任务: ").strip()
-
             if not task:
                 continue
-
             if task.lower() in ("quit", "exit", "q"):
                 print("\n👋 再见！")
                 break
 
-            if task.lower() == "workspace":
-                info = agent.executor.get_workspace_info()
-                print(f"\n📂 工作区: {info['workspace_dir']}")
-                print(f"📄 文件数: {info['file_count']}")
-                for f in info["files"]:
-                    size_kb = f["size"] / 1024
-                    print(f"  - {f['name']} ({size_kb:.1f} KB)")
-                continue
-
-            # 执行任务
-            result = agent.execute_task(task)
+            result = agent.execute(task)
             agent.print_result(result)
 
         except KeyboardInterrupt:
-            print("\n\n👋 检测到中断信号，再见！")
-            break
-        except EOFError:
-            print("\n\n👋 输入结束，再见！")
+            print("\n\n👋 再见！")
             break
