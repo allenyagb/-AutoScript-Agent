@@ -15,3 +15,7 @@ python3 qwen_chat.py
 编写基础操作测试：写文件测试
 编写基础操作测试：移动文件测试
 编写基础操作测试：执行文件测试
+
+
+#虚拟环境启动agent
+cd /home/yg/LinuxMind && LM_env/bin/python3 agent_cli.py
