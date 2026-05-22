@@ -45,6 +45,11 @@ class ExecuteShellInput(BaseModel):
     command: str = Field(description="要执行的 Shell 命令（会在沙箱工作区中执行）")
 
 
+class DeleteFileInput(BaseModel):
+    """删除文件输入"""
+    filepath: str = Field(description="要删除的文件路径（相对于工作区）")
+
+
 # ===================== Tools =====================
 
 @tool(args_schema=WriteFileInput)
@@ -128,6 +133,33 @@ def move_file(source: str, destination: str) -> str:
         return f"✅ 文件移动成功: {source} → {destination}"
     except Exception as e:
         return f"❌ 移动失败: {e}"
+
+
+@tool(args_schema=DeleteFileInput)
+def delete_file(filepath: str) -> str:
+    """
+    删除沙箱工作区中的文件。
+    使用此工具删除不需要的文件。只能删除工作区内的文件。
+    """
+    full_path = os.path.join(_executor.workspace_dir, filepath)
+
+    # 安全检查：禁止删除系统关键路径
+    resolved = os.path.realpath(full_path)
+    workspace_real = os.path.realpath(_executor.workspace_dir)
+    if not resolved.startswith(workspace_real):
+        return f"⛔ 安全拒绝: 不能删除工作区外的文件 {filepath}"
+
+    if not os.path.exists(full_path):
+        return f"❌ 文件不存在: {filepath}"
+
+    if os.path.isdir(full_path):
+        return f"❌ 不能直接删除目录: {filepath}（如需删除非空目录请用 execute_shell 执行 rm -r）"
+
+    try:
+        os.remove(full_path)
+        return f"✅ 文件已删除: {filepath}"
+    except Exception as e:
+        return f"❌ 删除失败: {e}"
 
 
 @tool(args_schema=ExecuteShellInput)

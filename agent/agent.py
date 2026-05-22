@@ -14,12 +14,12 @@ from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
 from .chat_model import ChatQwen
-from .tools import write_file, read_file, list_files, move_file, execute_shell
+from .tools import write_file, read_file, list_files, move_file, delete_file, execute_shell
 from .safety_checker import SafetyChecker
 from .script_executor import ScriptExecutor
 
 # 注册所有工具
-ALL_TOOLS = [write_file, read_file, list_files, move_file, execute_shell]
+ALL_TOOLS = [write_file, read_file, list_files, move_file, delete_file, execute_shell]
 
 SYSTEM_PROMPT = """你是 Ubuntu 24.04 上的自主任务执行助手 AutoScript Agent。
 
@@ -29,6 +29,7 @@ SYSTEM_PROMPT = """你是 Ubuntu 24.04 上的自主任务执行助手 AutoScript
 - read_file: 读取文件内容
 - list_files: 列出工作区文件
 - move_file: 移动或重命名文件
+- delete_file: 删除工作区文件
 - execute_shell: 执行安全的 Shell 命令
 
 ## 工作原则
