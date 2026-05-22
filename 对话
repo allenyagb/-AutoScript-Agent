@@ -1,3 +1,17 @@
-source LM_env/bin/activate
 
+
+#激活虚拟环境并运行代码
+source LM_env/bin/activate
 python3 qwen_chat.py
+
+
+
+#阶段1
+创建项目目录结构和核心模块骨架
+实现脚本生成模块 (ScriptGenerator) - 集成 QwenChat 调用大模型生成脚本
+实现脚本执行模块 (ScriptExecutor) - 安全执行脚本并捕获输出
+实现安全性检查模块 (SafetyChecker) - 检测高风险指令
+实现核心 Agent 主控模块 - 编排任务解析、生成、执行流程
+编写基础操作测试：写文件测试
+编写基础操作测试：移动文件测试
+编写基础操作测试：执行文件测试

@@ -1,0 +1,4 @@
+Hello from AutoScript Agent!
+当前时间: Fri May 22 01:32:57 AM UTC 2026
+操作系统: Linux ubuntu200 6.8.0-117-generic #117-Ubuntu SMP PREEMPT_DYNAMIC Tue May  5 19:26:24 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+工作区: /home/yg/LinuxMind/sandbox_workspace
