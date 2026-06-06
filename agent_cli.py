@@ -3,6 +3,8 @@
 """
 AutoScript Agent 交互式命令行
 用法: python3 agent_cli.py
+
+Rich 流式输出版本 — 美观、实时、现代化终端体验
 """
 
 import sys
@@ -12,35 +14,44 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agent import LangChainAgent
+from agent.console import console, dim, user_style
+
+from rich.panel import Panel
+from rich.text import Text
+from rich import box
 
 
-BANNER = """
-╔══════════════════════════════════════════════╗
-║        🤖 AutoScript Agent 交互终端          ║
-║      自然语言驱动 · 自主执行 · 多轮对话       ║
-╚══════════════════════════════════════════════╝
-
-  输入任务描述，Agent 会自主规划并执行。
-  
-  特殊命令:
-    /clear   清空对话历史
-    /history 查看对话摘要
-    /exit    退出
-
-  可用工具: write_file | read_file | list_files | move_file | delete_file | execute_shell
-"""
+BANNER = Panel(
+    Text.from_markup(
+        "[bold]🤖 AutoScript Agent 交互终端[/bold]\n\n"
+        "[dim]自然语言驱动 · 自主执行 · 多轮对话[/dim]\n\n"
+        "[dim]特殊命令:[/dim]\n"
+        "  [info]/clear[/info]   清空对话历史\n"
+        "  [info]/history[/info] 查看对话摘要\n"
+        "  [info]/exit[/info]    退出\n\n"
+        "[dim]可用工具:[/dim] [tool]write_file[/tool] | [tool]read_file[/tool] | "
+        "[tool]list_files[/tool] | [tool]move_file[/tool] | "
+        "[tool]delete_file[/tool] | [tool]execute_shell[/tool]"
+    ),
+    title="🏠 主菜单",
+    border_style="agent",
+    box=box.HEAVY,
+    padding=(1, 2),
+)
 
 
 def main():
-    print(BANNER)
+    console.print(BANNER)
 
     agent = LangChainAgent()
+    console.print(f"[success]✅ Agent 已就绪[/success] [dim](LangChain + qwen3.7-max)[/dim]")
+    console.print(f"[dim]📂 工作区: {agent.workspace_dir}[/dim]")
 
     while True:
         try:
-            user_input = input("\n🧑 你: ").strip()
+            user_input = console.input("\n[user]🧑 你:[/user] ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n👋 再见！")
+            console.print("\n[agent]👋 再见！[/agent]")
             break
 
         if not user_input:
@@ -48,30 +59,41 @@ def main():
 
         # 特殊命令
         if user_input == "/exit":
-            print("👋 再见！")
+            console.print("[agent]👋 再见！[/agent]")
             break
         elif user_input == "/clear":
             agent.clear_history()
             continue
         elif user_input == "/history":
-            print(agent.get_history_summary())
+            console.print(f"[dim]{agent.get_history_summary()}[/dim]")
             continue
         elif user_input == "/help":
-            print(BANNER)
+            console.print(BANNER)
             continue
 
         # 执行任务
         result = agent.execute(user_input)
 
-        # 显示结果
-        print(f"\n{'='*50}")
+        # 显示结果摘要
+        console.print()
         if result["success"]:
-            print(f"✅ 任务完成 (耗时 {result['elapsed']:.1f}s, 重试 {result['retries']} 次)")
+            console.print(
+                Panel(
+                    Text(result["final_answer"]),
+                    title=f"✅ 任务完成 (耗时 {result['elapsed']:.1f}s, 重试 {result['retries']} 次)",
+                    border_style="success",
+                    box=box.ROUNDED,
+                )
+            )
         else:
-            print(f"❌ 任务失败 (重试 {result['retries']} 次)")
-        print(f"{'='*50}")
-        print(result["final_answer"])
-        print(f"{'='*50}")
+            console.print(
+                Panel(
+                    Text(result["final_answer"]),
+                    title=f"❌ 任务失败 (重试 {result['retries']} 次)",
+                    border_style="error",
+                    box=box.ROUNDED,
+                )
+            )
 
 
 if __name__ == "__main__":
