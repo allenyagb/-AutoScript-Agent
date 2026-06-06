@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 脚本生成模块 - 利用 Qwen 大模型将自然语言任务转换为可执行脚本
-Rich 流式输出版本
 """
 
 import re
@@ -11,19 +10,9 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.syntax import Syntax
-from rich.panel import Panel
-
 # 添加项目根目录到 Python 路径，以便导入 qwen_chat
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from qwen_chat import QwenChat
-
-# 导入项目控制台
-try:
-    from .console import console, dim, code_block
-except ImportError:
-    from agent.console import console, dim, code_block
 
 
 @dataclass
@@ -37,7 +26,7 @@ class GeneratedScript:
 
 
 class ScriptGenerator:
-    """脚本生成器 - 使用 Qwen 模型生成可执行脚本（Rich 流式输出）"""
+    """脚本生成器 - 使用 Qwen 模型生成可执行脚本"""
 
     # 脚本生成的系统提示词
     SYSTEM_PROMPT = """你是 Ubuntu 24.04 上的脚本生成专家。将用户任务转为可执行脚本。
@@ -80,13 +69,9 @@ class ScriptGenerator:
         # 每次生成创建新的对话实例，避免历史积累
         chat = QwenChat(api_key=self.api_key)
 
-        console.print()
-        console.print(f"  [dim]⏳ 正在调用 {chat.model} 模型生成脚本...[/dim]")
-
-        # 使用流式输出获取响应
-        raw_response = chat.chat(prompt, stream=True)
-
-        console.print(f"  [success]✅ 模型响应已收到[/success] [dim]({len(raw_response)} 字符)[/dim]")
+        print("  ⏳ 正在调用 qwen3.7-max 模型生成脚本...")
+        raw_response = chat.chat(prompt, stream=False)
+        print(f"  ✅ 模型响应已收到 ({len(raw_response)} 字符)")
 
         # 解析模型响应，提取脚本
         script_content, script_type, description = self._parse_response(raw_response)
@@ -94,22 +79,14 @@ class ScriptGenerator:
         # 后处理：清理脚本
         script_content = self._clean_script(script_content, script_type)
 
-        # 代码高亮展示
-        lang = "python" if script_type == "python" else "bash"
-        console.print(
-            Panel(
-                code_block(script_content, language=lang),
-                title=f"📄 生成 {script_type.upper()} 脚本 ({len(script_content)} 字符)",
-                border_style="success",
-            )
-        )
+        print(f"  📄 生成 {script_type} 脚本 ({len(script_content)} 字符)")
 
         return GeneratedScript(
             content=script_content,
             script_type=script_type,
             language="Python" if script_type == "python" else "Bash",
             description=description,
-            raw_response=raw_response,
+            raw_response=raw_response
         )
 
     def _parse_response(self, response: str) -> tuple:
@@ -143,9 +120,7 @@ class ScriptGenerator:
 
         if not script_content:
             # 没有代码块标记，尝试提取
-            if re.search(
-                r"(import\s+\w+|def\s+\w+\s*\(|#!/usr/bin/env\s+python)", response
-            ):
+            if re.search(r"(import\s+\w+|def\s+\w+\s*\(|#!/usr/bin/env\s+python)", response):
                 script_type = "python"
 
             script_content = response.strip()
