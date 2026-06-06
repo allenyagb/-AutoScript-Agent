@@ -43,7 +43,12 @@ class ScriptExecutor:
             workspace_dir: 工作区目录，脚本在此目录下执行
             use_sandbox: 是否使用沙箱执行（MVP阶段先实现简单子进程执行）
         """
-        self.workspace_dir = os.path.abspath(workspace_dir or os.path.join(os.getcwd(), "sandbox_workspace"))
+        self.workspace_dir = os.path.abspath(
+            workspace_dir or os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "sandbox_workspace"
+            )
+        )
         self.use_sandbox = use_sandbox
 
         # 确保工作区目录存在

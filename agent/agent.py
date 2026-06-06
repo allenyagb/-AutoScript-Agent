@@ -97,6 +97,7 @@ class LangChainAgent:
         # ── 错误重试循环 ──
         retries = 0
         last_error = ""
+        backoff_base = 2  # 退避基数（秒）
 
         while retries <= MAX_RETRIES:
             try:
@@ -116,11 +117,23 @@ class LangChainAgent:
                         "retries": retries,
                     }
 
-                print(f"  ⚠️ 第 {retries}/{MAX_RETRIES} 次重试... (错误: {last_error[:100]})")
-                # 将错误信息注入对话，让 LLM 自我修正
-                self._conversation_history.append(
-                    HumanMessage(content=f"上次执行出错: {last_error}\n请修正后重试。")
-                )
+                # 区分超时/网络错误 vs 逻辑错误
+                is_transient = any(kw in last_error.lower() for kw in
+                                   ("timeout", "timed out", "connection", "network",
+                                    "unreachable", "dns", "reset", "refused"))
+
+                if is_transient:
+                    # 基础设施错误：退避等待后重试，不污染对话历史
+                    wait = min(backoff_base ** retries, 30)
+                    print(f"  ⚠️ 第 {retries}/{MAX_RETRIES} 次重试 (退避 {wait}s)... "
+                          f"(错误: {last_error[:80]})")
+                    time.sleep(wait)
+                else:
+                    # 逻辑/代码错误：注入对话历史让 LLM 自我修正
+                    print(f"  ⚠️ 第 {retries}/{MAX_RETRIES} 次重试... (错误: {last_error[:100]})")
+                    self._conversation_history.append(
+                        HumanMessage(content=f"上次执行出错: {last_error}\n请修正后重试。")
+                    )
 
         # ── 更新历史 ──
         self._conversation_history = list(result.get("messages", []))

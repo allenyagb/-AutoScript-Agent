@@ -79,6 +79,7 @@ class ChatQwen(BaseChatModel):
     api_key: str = Field(default="sk-ee03a518654647f09d2579009abbb4c2")
     model_name: str = Field(default="qwen3.7-max")
     temperature: float = Field(default=0.1)
+    request_timeout: int = Field(default=120, description="API 请求超时（秒），复杂工具调用任务可能需要较长时间")
     api_url: str = Field(
         default="https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
     )
@@ -137,8 +138,6 @@ class ChatQwen(BaseChatModel):
 
         # SSL 上下文
         ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
 
         data = json.dumps(payload).encode("utf-8")
         headers = {
@@ -149,7 +148,7 @@ class ChatQwen(BaseChatModel):
         req = request.Request(self.api_url, data=data, headers=headers, method="POST")
 
         try:
-            response = request.urlopen(req, context=ssl_context, timeout=60)
+            response = request.urlopen(req, context=ssl_context, timeout=self.request_timeout)
             response_data = json.loads(response.read().decode("utf-8"))
         except error.HTTPError as e:
             error_body = e.read().decode("utf-8") if e.fp else str(e)
