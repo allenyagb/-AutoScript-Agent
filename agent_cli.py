@@ -34,7 +34,7 @@ BANNER = """
 def main():
     print(BANNER)
 
-    agent = LangChainAgent()
+    agent = LangChainAgent(workspace_dir="/")
 
     while True:
         try:

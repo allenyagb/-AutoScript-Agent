@@ -208,6 +208,74 @@ class SafetyChecker:
         else:
             return self.check_shell_script(script_content)
 
+    # ── 文件路径安全检查 ──
+    # 写操作：绝对禁止的路径（dangerous，直接拒绝）
+    PROTECTED_SYSTEM_PATHS = [
+        "/etc", "/boot", "/bin", "/sbin", "/lib", "/lib64",
+        "/usr/bin", "/usr/sbin", "/usr/lib", "/usr/lib64",
+        "/sys", "/proc", "/dev", "/root", "/var/log",
+    ]
+
+    # 读操作：敏感但允许读取的路径（warning，记录但不拒绝）
+    SENSITIVE_READ_PATHS = [
+        "/etc/shadow", "/etc/passwd", "/etc/ssh",
+    ]
+
+    @staticmethod
+    def _get_user_security_paths() -> list:
+        """动态获取当前用户的敏感路径（~/.ssh, ~/.bashrc 等）"""
+        import os
+        home = os.path.expanduser("~")
+        return [
+            os.path.join(home, ".ssh"),
+            os.path.join(home, ".gnupg"),
+            os.path.join(home, ".bashrc"),
+            os.path.join(home, ".bash_profile"),
+            os.path.join(home, ".profile"),
+        ]
+
+    def check_file_path(self, filepath: str, operation: str = "write") -> SafetyReport:
+        """
+        检查文件路径安全性。区分读写操作的危险等级。
+
+        Args:
+            filepath: 绝对文件路径
+            operation: "write"(写/删/移) | "read"(只读)
+
+        Returns:
+            SafetyReport: 写操作返回 dangerous/warning，读操作对敏感路径返回 warning
+        """
+        import os
+        report = SafetyReport()
+        resolved = os.path.realpath(os.path.abspath(filepath))
+
+        # 1. 系统关键路径 — 写操作绝对禁止
+        for protected in self.PROTECTED_SYSTEM_PATHS:
+            if resolved == protected or resolved.startswith(protected + "/"):
+                if operation == "write":
+                    report.is_safe = False
+                    report.risk_level = "dangerous"
+                    report.risks.append(f"危险: 禁止写入系统关键路径: {resolved}")
+                    return report
+                else:
+                    # 读系统文件：只警告
+                    report.risk_level = "warning"
+                    report.risks.append(f"警告: 读取系统敏感路径: {resolved}")
+
+        # 2. 用户安全路径 — 写操作绝对禁止
+        for user_path in self._get_user_security_paths():
+            if resolved == user_path or resolved.startswith(user_path + os.sep):
+                if operation == "write":
+                    report.is_safe = False
+                    report.risk_level = "dangerous"
+                    report.risks.append(f"危险: 禁止写入用户安全路径: {resolved}")
+                    return report
+                elif report.risk_level != "dangerous":
+                    report.risk_level = "warning"
+                    report.risks.append(f"警告: 读取用户敏感路径: {resolved}")
+
+        return report
+
     def _detect_script_type(self, content: str) -> str:
         """自动检测脚本类型"""
         if content.strip().startswith("#!/") and "python" in content.split("\n")[0].lower():

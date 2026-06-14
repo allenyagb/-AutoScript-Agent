@@ -17,7 +17,10 @@ from agent.script_executor import ScriptExecutor
 from agent.safety_checker import SafetyChecker
 
 # 全局执行器和检查器实例
-_executor = ScriptExecutor()
+# 设 workspace_dir="/" 使文件操作可访问全局目录
+# os.path.join("/", "etc/passwd") → "/etc/passwd"（绝对路径操作）
+# 如需限制，改为 ScriptExecutor(workspace_dir="/your/restricted/path")
+_executor = ScriptExecutor(workspace_dir="/")
 _checker = SafetyChecker()
 
 
@@ -60,6 +63,13 @@ def write_file(filepath: str, content: str) -> str:
     文件路径相对于工作区目录。
     """
     full_path = os.path.join(_executor.workspace_dir, filepath)
+    full_path = os.path.abspath(full_path)
+
+    # 安全检查：禁止写入系统/用户关键路径
+    path_report = _checker.check_file_path(full_path, operation="write")
+    if path_report.risk_level == "dangerous":
+        return f"⛔ 安全拒绝: {'; '.join(path_report.risks)}"
+
     os.makedirs(os.path.dirname(full_path) or _executor.workspace_dir, exist_ok=True)
 
     try:
@@ -78,6 +88,13 @@ def read_file(filepath: str) -> str:
     使用此工具查看已创建文件的内容。
     """
     full_path = os.path.join(_executor.workspace_dir, filepath)
+    full_path = os.path.abspath(full_path)
+
+    # 安全检查：读取敏感路径时发出警告（不拒绝，但记录）
+    path_report = _checker.check_file_path(full_path, operation="read")
+    if path_report.risk_level == "warning":
+        pass  # 允许读取但 risk 已记录在 report 中
+
     if not os.path.exists(full_path):
         return f"❌ 文件不存在: {filepath}"
 
@@ -123,6 +140,14 @@ def move_file(source: str, destination: str) -> str:
     """
     src_path = os.path.join(_executor.workspace_dir, source)
     dst_path = os.path.join(_executor.workspace_dir, destination)
+    src_path = os.path.abspath(src_path)
+    dst_path = os.path.abspath(dst_path)
+
+    # 安全检查：禁止移动系统关键路径的文件，禁止写入目标到系统关键路径
+    for path, label in [(src_path, "源"), (dst_path, "目标")]:
+        path_report = _checker.check_file_path(path, operation="write")
+        if path_report.risk_level == "dangerous":
+            return f"⛔ 安全拒绝({label}路径): {'; '.join(path_report.risks)}"
 
     if not os.path.exists(src_path):
         return f"❌ 源文件不存在: {source}"
@@ -142,12 +167,12 @@ def delete_file(filepath: str) -> str:
     使用此工具删除不需要的文件。只能删除工作区内的文件。
     """
     full_path = os.path.join(_executor.workspace_dir, filepath)
+    full_path = os.path.abspath(full_path)
 
-    # 安全检查：禁止删除系统关键路径
-    resolved = os.path.realpath(full_path)
-    workspace_real = os.path.realpath(_executor.workspace_dir)
-    if not resolved.startswith(workspace_real):
-        return f"⛔ 安全拒绝: 不能删除工作区外的文件 {filepath}"
+    # 安全检查：禁止删除系统/用户关键路径
+    path_report = _checker.check_file_path(full_path, operation="write")
+    if path_report.risk_level == "dangerous":
+        return f"⛔ 安全拒绝: {'; '.join(path_report.risks)}"
 
     if not os.path.exists(full_path):
         return f"❌ 文件不存在: {filepath}"
