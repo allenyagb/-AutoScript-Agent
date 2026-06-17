@@ -315,49 +315,176 @@ function addCard(slide, x, y, w, h, color) {
   const s = pres.addSlide();
   s.background = { color: C.white };
   addAccentBar(s, C.teal);
-  addPageTitle(s, "核心功能展示", "两大核心能力：自然语言文件操作 · 安全Shell命令执行");
+  addPageTitle(s, "核心功能展示", "6 个 LangChain 工具 · 自然语言驱动 · 自主决策执行");
 
-  // Feature 1 card
-  addCard(s, 0.65, 1.3, 4.2, 3.9, C.white);
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 0.65, y: 1.3, w: 4.2, h: 0.06, fill: { color: C.mint },
-  });
-  s.addText("功能一：自然语言文件操作", {
-    x: 0.95, y: 1.5, w: 3.6, h: 0.35,
-    fontSize: 14, fontFace: F.body, bold: true, color: C.teal, margin: 0,
-  });
-  s.addText([
-    { text: "用户输入自然语言 → Agent 自主调用工具", options: { breakLine: true, fontSize: 10, fontFace: F.body, color: C.muted, paraSpaceAfter: 8 } },
-    { text: "write_file — 创建/覆盖文件", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "read_file — 读取文件内容", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "list_files — 列出工作区文件", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "move_file — 移动/重命名文件", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "delete_file — 删除文件（含realpath边界检查）", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-  ], { x: 0.95, y: 1.95, w: 3.6, h: 3.0 });
+  // ── 6 Tool Cards (2 rows × 3 cols) ──
+  const tools = [
+    { icon: "📄", name: "write_file", desc: "创建/覆盖文件\n支持任意路径写入", color: C.teal },
+    { icon: "📖", name: "read_file", desc: "读取文件内容\n敏感路径告警但不拦截", color: C.seafoam },
+    { icon: "📂", name: "list_files", desc: "列出工作区文件\n查看目录结构", color: C.mint },
+    { icon: "🔄", name: "move_file", desc: "移动/重命名文件\n跨目录整理", color: "0D9488" },
+    { icon: "🗑️", name: "delete_file", desc: "删除指定文件\n关键路径保护", color: "0F766E" },
+    { icon: "⚡", name: "execute_shell", desc: "执行 Shell 命令\n20+ 规则安全检查", color: "115E59" },
+  ];
 
-  // Feature 2 card
-  addCard(s, 5.15, 1.3, 4.2, 3.9, C.white);
-  s.addShape(pres.shapes.RECTANGLE, {
-    x: 5.15, y: 1.3, w: 4.2, h: 0.06, fill: { color: C.mint },
+  const toolCardW = 1.38, toolCardH = 1.25, toolStartX = 0.55, toolGap = 0.1;
+  tools.forEach((t, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const tx = toolStartX + col * (toolCardW + toolGap);
+    const ty = 1.15 + row * (toolCardH + toolGap);
+
+    addCard(s, tx, ty, toolCardW, toolCardH, C.white);
+    // Top color bar
+    s.addShape(pres.shapes.RECTANGLE, {
+      x: tx, y: ty, w: toolCardW, h: 0.04, fill: { color: t.color },
+    });
+    // Icon + Name
+    s.addText(`${t.icon}  ${t.name}`, {
+      x: tx + 0.08, y: ty + 0.1, w: toolCardW - 0.16, h: 0.35,
+      fontSize: 10, fontFace: F.body, bold: true, color: t.color, margin: 0,
+    });
+    // Description
+    s.addText(t.desc, {
+      x: tx + 0.08, y: ty + 0.5, w: toolCardW - 0.16, h: 0.65,
+      fontSize: 8, fontFace: F.body, color: C.muted,
+    });
   });
-  s.addText("功能二：安全Shell命令执行", {
-    x: 5.45, y: 1.5, w: 3.6, h: 0.35,
-    fontSize: 14, fontFace: F.body, bold: true, color: C.teal, margin: 0,
+
+  // ── Right Side: 典型使用场景 ──
+  addCard(s, 5.05, 1.15, 4.45, 2.65, C.gray);
+  s.addText("典型使用场景", {
+    x: 5.35, y: 1.22, w: 3.8, h: 0.3,
+    fontSize: 13, fontFace: F.body, bold: true, color: C.teal, margin: 0,
   });
-  s.addText([
-    { text: "命令 → 安全检查 → 执行/拦截 → 返回结果", options: { breakLine: true, fontSize: 10, fontFace: F.body, color: C.muted, paraSpaceAfter: 8 } },
-    { text: "正则匹配：20+ 条危险命令黑名单", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "AST 分析：Python 脚本语法树检测", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "三级风险：safe / warning / dangerous", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-    { text: "dangerous 级别直接拒绝执行", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.danger } },
-    { text: "沙箱工作区隔离 + 30s超时 + 10MB输出截断", options: { bullet: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text } },
-  ], { x: 5.45, y: 1.95, w: 3.6, h: 3.0 });
+
+  const scenarios = [
+    { input: "帮我在 /home/yg 下创建一个 hello.py 写入打印Hello的代码并执行它", label: "🗣️ 用户输入", isUser: true },
+    { input: "✅ 调用 write_file → 写入代码\n✅ 调用 execute_shell → 运行脚本\n✅ 返回执行结果给用户", label: "🤖 Agent 执行", isUser: false },
+    { input: "检查系统磁盘使用情况，如果 /dev/sda1 超过 80% 就列出 /var/log 下最大的 5 个文件", label: "🗣️ 用户输入", isUser: true },
+    { input: "✅ 执行 df -h 获取磁盘信息\n✅ 分析使用率 → 判断是否 > 80%\n✅ 执行 du -sh /var/log/* | sort -rh | head -5\n✅ 汇总结果报告给用户", label: "🤖 Agent 执行", isUser: false },
+  ];
+
+  scenarios.forEach((sc, i) => {
+    const sy = 1.6 + i * 0.52;
+    s.addText(sc.label, {
+      x: 5.35, y: sy, w: 3.8, h: 0.15,
+      fontSize: 7, fontFace: F.body, bold: true, color: sc.isUser ? C.warn : C.green, margin: 0,
+    });
+    s.addText(sc.input, {
+      x: 5.35, y: sy + 0.15, w: 3.8, h: 0.35,
+      fontSize: 7.5, fontFace: F.body, color: sc.isUser ? C.text : C.muted, margin: 0,
+    });
+  });
+
+  // ── Bottom: Agent 能力雷达 ──
+  addCard(s, 0.55, 3.95, 8.9, 1.35, C.white);
+  s.addText("Agent 能力一览", {
+    x: 0.85, y: 4.02, w: 3, h: 0.28,
+    fontSize: 12, fontFace: F.body, bold: true, color: C.teal, margin: 0,
+  });
+
+  const capabilities = [
+    { cat: "文件管理", items: "创建 · 读取 · 移动 · 删除 · 批量整理分类", color: C.teal },
+    { cat: "Shell 执行", items: "系统命令 · 脚本运行 · 管道组合 · 输出捕获", color: C.seafoam },
+    { cat: "系统巡检", items: "CPU/内存/磁盘监控 · 僵尸进程检测 · crontab 定时", color: C.mint },
+    { cat: "智能交互", items: "多轮对话 · 上下文记忆 · 失败重试 · 自我修正", color: "0D9488" },
+  ];
+
+  capabilities.forEach((cap, i) => {
+    const cx = 0.85 + i * 2.15;
+    s.addShape(pres.shapes.RECTANGLE, {
+      x: cx, y: 4.38, w: 1.95, h: 0.78,
+      fill: { color: C.lightBg },
+    });
+    s.addText(cap.cat, {
+      x: cx + 0.12, y: 4.42, w: 1.7, h: 0.22,
+      fontSize: 9, fontFace: F.body, bold: true, color: cap.color, margin: 0,
+    });
+    s.addText(cap.items, {
+      x: cx + 0.12, y: 4.66, w: 1.7, h: 0.45,
+      fontSize: 8, fontFace: F.body, color: C.muted,
+    });
+  });
 
   addSlideNumber(s, 5);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SLIDE 6 — 测试与验证
+// SLIDE 6 — 安全防护体系 (原Slide5)
+// ═══════════════════════════════════════════════════════════════
+{
+  const s = pres.addSlide();
+  s.background = { color: C.white };
+  addAccentBar(s, C.teal);
+  addPageTitle(s, "安全防护体系", "五层防护 · 全局文件系统可访问 · 系统/用户关键路径保护");
+
+  // ── 5-layer architecture flow ──
+  const layers = [
+    { label: "Layer 1\n系统路径保护", desc: "14个路径\nwrite/delete/move 拒绝", color: C.teal },
+    { label: "Layer 2\n用户安全保护", desc: "~/.ssh ~/.bashrc\n~/.gnupg ~/.profile", color: C.seafoam },
+    { label: "Layer 3\n敏感读取告警", desc: "/etc/shadow\n~/.ssh/id_rsa", color: C.mint },
+    { label: "Layer 4\nShell命令检查", desc: "20+ regex\nrm -rf / 等拦截", color: "0D9488" },
+    { label: "Layer 5\nPython AST", desc: "eval() os.system()\nsubprocess检测", color: "0F766E" },
+  ];
+  layers.forEach((l, i) => {
+    const lx = 0.4 + i * 1.88;
+    s.addShape(pres.shapes.RECTANGLE, {
+      x: lx, y: 1.15, w: 1.7, h: 0.95,
+      fill: { color: C.white }, shadow: mkShadow(),
+    });
+    s.addShape(pres.shapes.RECTANGLE, {
+      x: lx, y: 1.15, w: 1.7, h: 0.05, fill: { color: l.color },
+    });
+    s.addText(l.label, {
+      x: lx + 0.1, y: 1.22, w: 1.5, h: 0.5,
+      fontSize: 8, fontFace: F.body, bold: true, color: l.color, align: "center", margin: 0,
+    });
+    s.addText(l.desc, {
+      x: lx + 0.1, y: 1.65, w: 1.5, h: 0.4,
+      fontSize: 7, fontFace: F.body, color: C.muted, align: "center",
+    });
+  });
+
+  // ── Left: Path Protection Table ──
+  addCard(s, 0.65, 2.3, 4.2, 3.0, C.white);
+  s.addText("路径级安全保护", {
+    x: 0.95, y: 2.4, w: 3.6, h: 0.3,
+    fontSize: 13, fontFace: F.body, bold: true, color: C.teal, margin: 0,
+  });
+
+  // Operation-specific logic
+  s.addText([
+    { text: "写操作 (write/delete/move)", options: { bold: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text, paraSpaceAfter: 3 } },
+    { text: "系统路径 /etc /boot /bin /sys /proc /dev", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+    { text: "用户安全 ~/.ssh ~/.gnupg ~/.bashrc", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+    { text: "普通路径 /home /tmp /var/www /opt", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.green, paraSpaceAfter: 6 } },
+    { text: "读操作 (read_file)", options: { bold: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text, paraSpaceAfter: 3 } },
+    { text: "敏感文件 /etc/shadow ~/.ssh/id_rsa", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.warn } },
+    { text: "普通文件 无限制自由读取", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.green } },
+  ], { x: 0.95, y: 2.75, w: 3.6, h: 2.4 });
+
+  // ── Right: Shell & Python Protection ──
+  addCard(s, 5.15, 2.3, 4.2, 3.0, C.white);
+  s.addText("命令级安全保护", {
+    x: 5.45, y: 2.4, w: 3.6, h: 0.3,
+    fontSize: 13, fontFace: F.body, bold: true, color: C.teal, margin: 0,
+  });
+  s.addText([
+    { text: "Shell 正则检测 (20+ 条规则)", options: { bold: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text, paraSpaceAfter: 4 } },
+    { text: "rm -rf /  ·  mkfs ·  dd if=/dev/", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+    { text: "curl|sh  ·  wget|sh  ·  nc 反弹shell", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+    { text: "fork 炸弹  ·  systemctl stop ssh", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+    { text: "sudo  ·  chmod 777 /  ·  chown -R /", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.warn, paraSpaceAfter: 6 } },
+    { text: "Python AST 静态分析", options: { bold: true, breakLine: true, fontSize: 10, fontFace: F.body, color: C.text, paraSpaceAfter: 4 } },
+    { text: "eval() exec() compile() 动态执行", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+    { text: "os.system() subprocess.run() 危险参数", options: { bullet: true, breakLine: true, fontSize: 9, fontFace: F.body, color: C.danger } },
+  ], { x: 5.45, y: 2.75, w: 3.6, h: 2.4 });
+
+  addSlideNumber(s, 6);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SLIDE 7 — 测试与验证
 // ═══════════════════════════════════════════════════════════════
 {
   const s = pres.addSlide();
@@ -370,7 +497,7 @@ function addCard(slide, x, y, w, h, color) {
     { title: "功能测试", count: "7项", status: "全部通过", items: "文件CRUD · 系统信息 · 多轮对话 · 文件分类" },
     { title: "异常测试", count: "5项", status: "全部通过", items: "文件不存在 · 权限不足 · 网络断开 · 语法错误" },
     { title: "边界测试", count: "4项", status: "全部通过", items: "3s超时控制 · 空文件 · 10MB截断 · 中文路径" },
-    { title: "安全测试", count: "5项", status: "全部拦截", items: "rm -rf / · mkfs · curl|sh · dd · systemctl" },
+    { title: "安全测试", count: "10+项", status: "全部拦截", items: "Shell危险命令 · 路径保护 · AST分析 · 用户敏感路径" },
   ];
 
   tests.forEach((t, i) => {
@@ -403,9 +530,9 @@ function addCard(slide, x, y, w, h, color) {
   });
 
   const bugs = [
+    { title: "Sandbox 放开后安全", fix: "新增 check_file_path：14 系统路径 + 4 用户安全路径，读写分级检查" },
     { title: "API 超时死循环", fix: "退避重试(2s→4s→8s) + 超时错误不污染对话历史" },
-    { title: "工作区路径不一致", fix: "ScriptExecutor 改用 __file__ 相对路径，替代 os.getcwd()" },
-    { title: "delete_file 路径穿越", fix: "os.path.realpath() + 前缀匹配，拦截 ../ 越界" },
+    { title: "工作区路径漂移", fix: "ScriptExecutor 改用 __file__ 相对路径，替代 os.getcwd()" },
   ];
 
   bugs.forEach((b, i) => {
@@ -423,11 +550,11 @@ function addCard(slide, x, y, w, h, color) {
     });
   });
 
-  addSlideNumber(s, 6);
+  addSlideNumber(s, 7);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SLIDE 7 — 开发过程与版本迭代
+// SLIDE 8 — 开发过程与版本迭代
 // ═══════════════════════════════════════════════════════════════
 {
   const s = pres.addSlide();
@@ -501,11 +628,11 @@ function addCard(slide, x, y, w, h, color) {
     fontSize: 12, fontFace: F.body, color: C.teal, valign: "middle",
   });
 
-  addSlideNumber(s, 7);
+  addSlideNumber(s, 8);
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SLIDE 8 — 小组分工与总结
+// SLIDE 9 — 小组分工与总结
 // ═══════════════════════════════════════════════════════════════
 {
   const s = pres.addSlide();
@@ -585,7 +712,7 @@ function addCard(slide, x, y, w, h, color) {
     fontSize: 16, fontFace: F.title, color: C.teal, italic: true, margin: 0,
   });
 
-  addSlideNumber(s, 8);
+  addSlideNumber(s, 9);
 }
 
 // ── Write ──
